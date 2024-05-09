@@ -6,7 +6,7 @@ const bcrypt = require('bcrypt');
 const app = express();
 app.use(bodyParser.json());
 
-const sequelize = new Sequelize('your_database', 'your_username', 'your_password', {
+const sequelize = new Sequelize('Task', 'postgres', 'postgres', {
   host: 'localhost',
   dialect: 'postgres',
 });
@@ -31,6 +31,7 @@ sequelize.sync({ force: true })
     console.error('Error syncing database:', err);
   });
 
+// Endpoint for syncing user contacts
 app.post('/sync-contacts', async (req, res) => {
   const { userId, contacts } = req.body;
 
@@ -39,7 +40,8 @@ app.post('/sync-contacts', async (req, res) => {
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
-
+     
+    // avoiding duplicates
     await Promise.all(
       contacts.map(async contact => {
         const hashedNumber = await bcrypt.hash(contact.number, 10);
@@ -54,6 +56,7 @@ app.post('/sync-contacts', async (req, res) => {
   }
 });
 
+// Endpoint for finding common users for a particular number
 app.get('/find-common-users', async (req, res) => {
   const { searchNumber } = req.query;
 
@@ -72,6 +75,7 @@ app.get('/find-common-users', async (req, res) => {
   }
 });
 
+// Endpoint for getting contacts by userId with pagination and name search
 app.get('/get-contacts', async (req, res) => {
   const { userId, page = 1, pageSize = 10, searchText } = req.query;
 
