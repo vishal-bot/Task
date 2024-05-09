@@ -1,11 +1,12 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const Sequelize = require('sequelize');
+const bcrypt = require('bcrypt');
 
 const app = express();
 app.use(bodyParser.json());
 
-const sequelize = new Sequelize('Task', 'postgres', 'postgres', {
+const sequelize = new Sequelize('your_database', 'your_username', 'your_password', {
   host: 'localhost',
   dialect: 'postgres',
 });
@@ -16,35 +17,33 @@ const User = sequelize.define('user', {
 
 const Contact = sequelize.define('contact', {
   name: Sequelize.STRING,
-  number: Sequelize.STRING, 
+  number: Sequelize.STRING, // Store hashed phone number
 });
 
 User.hasMany(Contact);
 Contact.belongsTo(User);
 
-sequelize.sync({ force: false })
+sequelize.sync({ force: true })
   .then(() => {
     console.log('Database & tables created!');
   })
   .catch(err => {
     console.error('Error syncing database:', err);
   });
-  
 
-// Endpoint for syncing user contacts
 app.post('/sync-contacts', async (req, res) => {
-  
+  const { userId, contacts } = req.body;
+
   try {
-    const { userId, contacts } = req.body;
     const user = await User.findByPk(userId);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // avoiding duplicates
     await Promise.all(
       contacts.map(async contact => {
-        await user.createContact(contact, { ignoreDuplicates: true });
+        const hashedNumber = await bcrypt.hash(contact.number, 10);
+        await user.createContact({ ...contact, number: hashedNumber }, { ignoreDuplicates: true });
       })
     );
 
@@ -55,7 +54,6 @@ app.post('/sync-contacts', async (req, res) => {
   }
 });
 
-// Endpoint for finding common users for a particular number
 app.get('/find-common-users', async (req, res) => {
   const { searchNumber } = req.query;
 
@@ -74,36 +72,35 @@ app.get('/find-common-users', async (req, res) => {
   }
 });
 
-// Endpoint for getting contacts by userId with pagination and name search
 app.get('/get-contacts', async (req, res) => {
-    const { userId, page = 1, pageSize = 10, searchText } = req.query;
-  
-    try {
-      const whereClause = {
-        userId: userId,
-      };
-  
-      if (searchText) {
-        whereClause.name = { [Sequelize.Op.iLike]: `%${searchText}%` };
-      }
-  
-      const totalCount = await Contact.count({ where: whereClause });
-      const contacts = await Contact.findAll({
-        where: whereClause,
-        limit: pageSize,
-        offset: (page - 1) * pageSize,
-      });
-  
-      res.json({
-        totalCount: totalCount,
-        rows: contacts,
-      });
-    } catch (error) {
-      console.error('Error getting contacts:', error);
-      res.status(500).json({ success: false, message: 'Error getting contacts' });
+  const { userId, page = 1, pageSize = 10, searchText } = req.query;
+
+  try {
+    const whereClause = {
+      userId: userId,
+    };
+
+    if (searchText) {
+      whereClause.name = { [Sequelize.Op.iLike]: `%${searchText}%` };
     }
-  });
-  
+
+    const totalCount = await Contact.count({ where: whereClause });
+    const contacts = await Contact.findAll({
+      where: whereClause,
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+    });
+
+    res.json({
+      totalCount: totalCount,
+      rows: contacts,
+    });
+  } catch (error) {
+    console.error('Error getting contacts:', error);
+    res.status(500).json({ success: false, message: 'Error getting contacts' });
+  }
+});
+
 app.listen(3000, () => {
   console.log('Server is running on port 3000');
 });
